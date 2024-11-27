@@ -17,15 +17,30 @@ jobs:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4
       
-      # Set up Gradle
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 
+      # Set up JDK (needed for Gradle)
+      - name: Set up JDK
+        uses: actions/setup-java@v4
         with:
-          gradle-version: '8.5'
+          distribution: 'microsoft'
+          java-version: '21'
+      
+      # Set up Gradle with explicit permissions
+      - name: Set up Gradle
+        uses: gradle/gradle-build-action@v2
+        with:
+          gradle-version: wrapper
+      
+      # Make Gradle executable
+      - name: Make Gradle executable
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --version
         
       # Run License Finder
       - name: 'Run License Finder'
         uses: jmservera/license-finder-action@main
+        env:
+          GRADLE_HOME: ${{ github.workspace }}/.gradle
         with:
           permitted-licenses: MIT,Apache-2.0
           approved-dependencies: |
