@@ -1,107 +1,53 @@
 name: License Compliance Verification
- 
+
 on:
   push:
-    branches: [ "main" ]
- 
+    branches: ["main"]
+
 permissions:
   contents: read
   issues: read
   checks: write
- 
+
 jobs:
   license-compliance-verification:
     runs-on: ubuntu-latest
     steps:
+      # Checkout Repository
       - name: 'Checkout Repository'
         uses: actions/checkout@v4
-      
+
+      # Set up JDK 21
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'microsoft'
 
+      # Set up Gradle
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 
+        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5
         with:
           gradle-version: '8.5'
 
-      - name: Give permission for gradle
-        run: chmod +x gradlew 
-      
-      - name: Generate License Report
-        run: ./gradlew generateLicenseReport
-        
-      # Parse and analyze licenses
-      - name: Analyze Licenses
-        id: license-analysis
+      # Run License Finder (Assuming you have license-finder configured for your Gradle project)
+      - name: 'Run License Finder'
         run: |
-          REPORT_FILE="build/reports/dependency-license/licenses.json"
-          
-          if [ ! -f "$REPORT_FILE" ]; then
-            echo "::error::License report file not found"
-            exit 1
-          fi
-          
-          # Create HTML report header
-          echo "<html><head><style>
-            table { border-collapse: collapse; width: 100%; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            .warning { background-color: #fff3cd; }
-            .violation { background-color: #f8d7da; }
-          </style></head><body>" > license_report.html
-          
-          echo "<h2>License Compliance Report</h2>" >> license_report.html
-          echo "<table><tr><th>Dependency</th><th>License</th><th>Status</th></tr>" >> license_report.html
-          
-          # List of allowed licenses (case insensitive)
-          ALLOWED_LICENSES="Apache.*2\.0|MIT|BSD|EPL.*2\.0|LGPL.*2\.1"
-          WARN_LICENSES="GPL.*2\.0|CDDL.*1\.0"
-          
-          VIOLATIONS=0
-          WARNINGS=0
-          
-          # Debug: Print content of license report
-          echo "Debug: Content of license report:"
-          cat "$REPORT_FILE"
-          
-          # Process each dependency in the JSON file
-          jq -r '.dependencies[] | "\(.moduleName)|\(.licenses[0].license)"' "$REPORT_FILE" | while IFS="|" read -r MODULE LICENSE; do
-            echo "Processing dependency: $MODULE with license: $LICENSE"
-            
-            if echo "$LICENSE" | grep -iE "$ALLOWED_LICENSES" > /dev/null; then
-              echo "<tr><td>$MODULE</td><td>$LICENSE</td><td>✓ Approved</td></tr>" >> license_report.html
-            elif echo "$LICENSE" | grep -iE "$WARN_LICENSES" > /dev/null; then
-              echo "<tr class='warning'><td>$MODULE</td><td>$LICENSE</td><td>⚠️ Review Required</td></tr>" >> license_report.html
-              WARNINGS=$((WARNINGS + 1))
-            else
-              echo "<tr class='violation'><td>$MODULE</td><td>$LICENSE</td><td>❌ Not Approved</td></tr>" >> license_report.html
-              VIOLATIONS=$((VIOLATIONS + 1))
-            fi
-          done
-          
-          echo "</table>" >> license_report.html
-          echo "<h3>Summary:</h3>" >> license_report.html
-          echo "<p>Violations found: $VIOLATIONS</p>" >> license_report.html
-          echo "<p>Warnings found: $WARNINGS</p>" >> license_report.html
-          echo "</body></html>" >> license_report.html
-          
-          # Set outputs for next steps
-          echo "violations=$VIOLATIONS" >> $GITHUB_OUTPUT
-          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
-          
-          if [ $VIOLATIONS -gt 0 ]; then
-            exit 1
-          fi
-          
-      # Upload HTML Report
-      - name: Upload License Report
+          # Install dependencies for License Finder
+          curl -L https://github.com/pivotal/LicenseFinder/releases/download/v6.2.2/license_finder-6.2.2-linux-x86_64.tar.gz | tar xz
+          ./license_finder-6.2.2-linux-x86_64/bin/license_finder report --format xml --output-file license_finder_report.xml
+
+      # Publish Report to GitHub UI
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2.2.0
+        if: always()
+        with:
+          junit_files: "license_finder_report.xml"
+
+      # Upload Report In Artifact
+      - name: 'Upload Dependency Review Report In Artifact'
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: license-reports
-          path: |
-            build/reports/dependency-license/*
-            license_report.html
+          name: license-finder-report
+          path: ${{ github.workspace }}/license_finder_report.xml
