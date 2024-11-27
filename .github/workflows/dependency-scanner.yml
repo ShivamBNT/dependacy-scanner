@@ -20,11 +20,12 @@ jobs:
       # Install Dependencies for License Finder (if needed)
       - name: 'Install License Finder'
         run: |
-             sudo apt-get update
-             sudo apt-get install -y ruby
-             gem install --user-install license_finder
+          apt-get update
+          apt-get install -y ruby
+          gem install --user-install license_finder
         env:
           PATH: "${HOME}/.gem/ruby/3.0.0/bin:${PATH}"
+
 
       # Run License Finder with Gradle
       - name: 'Run License Finder'
