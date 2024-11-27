@@ -37,7 +37,7 @@ jobs:
       - name: Analyze Licenses
         id: license-analysis
         run: |
-          REPORT_FILE="build/reports/dependency-license/licenses.json"
+          REPORT_FILE="build/reports/dependency-license/index.json"
           
           if [ ! -f "$REPORT_FILE" ]; then
             echo "::error::License report file not found"
