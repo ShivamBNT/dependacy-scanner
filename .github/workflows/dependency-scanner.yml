@@ -37,14 +37,14 @@ jobs:
       - name: Analyze Licenses
         id: license-analysis
         run: |
-          REPORT_FILE="build/reports/dependency-license/index.json"
+          REPORT_FILE="build/reports/dependency-license/licenses.json"
           
           if [ ! -f "$REPORT_FILE" ]; then
             echo "::error::License report file not found"
             exit 1
           fi
           
-          # Create a more detailed HTML report
+          # Create HTML report header
           echo "<html><head><style>
             table { border-collapse: collapse; width: 100%; }
             th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -56,30 +56,31 @@ jobs:
           echo "<h2>License Compliance Report</h2>" >> license_report.html
           echo "<table><tr><th>Dependency</th><th>License</th><th>Status</th></tr>" >> license_report.html
           
-          # List of allowed licenses
-          ALLOWED_LICENSES="Apache-2.0|MIT|BSD|EPL-2.0|LGPL-2.1"
-          WARN_LICENSES="GPL-2.0|CDDL-1.0"
+          # List of allowed licenses (case insensitive)
+          ALLOWED_LICENSES="Apache.*2\.0|MIT|BSD|EPL.*2\.0|LGPL.*2\.1"
+          WARN_LICENSES="GPL.*2\.0|CDDL.*1\.0"
           
           VIOLATIONS=0
           WARNINGS=0
           
-          while IFS= read -r line; do
-            if [[ $line =~ \"moduleName\":\ \"([^\"]+)\" ]]; then
-              MODULE="${BASH_REMATCH[1]}"
-            elif [[ $line =~ \"spdxIdentifier\":\ \"([^\"]+)\" ]]; then
-              LICENSE="${BASH_REMATCH[1]}"
-              
-              if [[ $LICENSE =~ $ALLOWED_LICENSES ]]; then
-                echo "<tr><td>$MODULE</td><td>$LICENSE</td><td>✓ Approved</td></tr>" >> license_report.html
-              elif [[ $LICENSE =~ $WARN_LICENSES ]]; then
-                echo "<tr class='warning'><td>$MODULE</td><td>$LICENSE</td><td>⚠️ Review Required</td></tr>" >> license_report.html
-                WARNINGS=$((WARNINGS + 1))
-              else
-                echo "<tr class='violation'><td>$MODULE</td><td>$LICENSE</td><td>❌ Not Approved</td></tr>" >> license_report.html
-                VIOLATIONS=$((VIOLATIONS + 1))
-              fi
+          # Debug: Print content of license report
+          echo "Debug: Content of license report:"
+          cat "$REPORT_FILE"
+          
+          # Process each dependency in the JSON file
+          jq -r '.dependencies[] | "\(.moduleName)|\(.licenses[0].license)"' "$REPORT_FILE" | while IFS="|" read -r MODULE LICENSE; do
+            echo "Processing dependency: $MODULE with license: $LICENSE"
+            
+            if echo "$LICENSE" | grep -iE "$ALLOWED_LICENSES" > /dev/null; then
+              echo "<tr><td>$MODULE</td><td>$LICENSE</td><td>✓ Approved</td></tr>" >> license_report.html
+            elif echo "$LICENSE" | grep -iE "$WARN_LICENSES" > /dev/null; then
+              echo "<tr class='warning'><td>$MODULE</td><td>$LICENSE</td><td>⚠️ Review Required</td></tr>" >> license_report.html
+              WARNINGS=$((WARNINGS + 1))
+            else
+              echo "<tr class='violation'><td>$MODULE</td><td>$LICENSE</td><td>❌ Not Approved</td></tr>" >> license_report.html
+              VIOLATIONS=$((VIOLATIONS + 1))
             fi
-          done < "$REPORT_FILE"
+          done
           
           echo "</table>" >> license_report.html
           echo "<h3>Summary:</h3>" >> license_report.html
