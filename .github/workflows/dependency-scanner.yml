@@ -13,57 +13,89 @@ jobs:
   license-compliance-verification:
     runs-on: ubuntu-latest
     steps:
-      # Checkout Repository
       - name: 'Checkout Repository'
         uses: actions/checkout@v4
       
-      # Set up JDK
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'microsoft'
 
-      # Set up Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 
         with:
           gradle-version: '8.5'
 
-      - name: give permission for gradle
-        run : chmod +x gradlew 
+      - name: Give permission for gradle
+        run: chmod +x gradlew 
       
-      # Generate License Report
       - name: Generate License Report
         run: ./gradlew generateLicenseReport
         
-      # Convert License Report to XML
-      - name: Convert License Report to XML
+      # Parse and analyze licenses
+      - name: Analyze Licenses
+        id: license-analysis
         run: |
-          echo '<?xml version="1.0" encoding="UTF-8"?>
-          <testsuites>
-            <testsuite name="License Compliance" tests="1">
-          ' > license_finder_report.xml
+          REPORT_FILE="build/reports/dependency-license/licenses.json"
           
-          if [ -f "build/reports/dependency-license/licenses.json" ]; then
-            echo '<testcase name="License Check" status="passed"/>' >> license_finder_report.xml
-          else
-            echo '<testcase name="License Check" status="failed">
-              <failure message="License check failed"/>
-            </testcase>' >> license_finder_report.xml
+          if [ ! -f "$REPORT_FILE" ]; then
+            echo "::error::License report file not found"
+            exit 1
           fi
           
-          echo '  </testsuite>
-          </testsuites>' >> license_finder_report.xml
- 
-      # Publish Report to GitHub UI
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2.2.0
-        if: always()
-        with:
-          junit_files: "license_finder_report.xml"
- 
-      # Upload License Report as Artifact
+          # Create a more detailed HTML report
+          echo "<html><head><style>
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            .warning { background-color: #fff3cd; }
+            .violation { background-color: #f8d7da; }
+          </style></head><body>" > license_report.html
+          
+          echo "<h2>License Compliance Report</h2>" >> license_report.html
+          echo "<table><tr><th>Dependency</th><th>License</th><th>Status</th></tr>" >> license_report.html
+          
+          # List of allowed licenses
+          ALLOWED_LICENSES="Apache-2.0|MIT|BSD|EPL-2.0|LGPL-2.1"
+          WARN_LICENSES="GPL-2.0|CDDL-1.0"
+          
+          VIOLATIONS=0
+          WARNINGS=0
+          
+          while IFS= read -r line; do
+            if [[ $line =~ \"moduleName\":\ \"([^\"]+)\" ]]; then
+              MODULE="${BASH_REMATCH[1]}"
+            elif [[ $line =~ \"spdxIdentifier\":\ \"([^\"]+)\" ]]; then
+              LICENSE="${BASH_REMATCH[1]}"
+              
+              if [[ $LICENSE =~ $ALLOWED_LICENSES ]]; then
+                echo "<tr><td>$MODULE</td><td>$LICENSE</td><td>✓ Approved</td></tr>" >> license_report.html
+              elif [[ $LICENSE =~ $WARN_LICENSES ]]; then
+                echo "<tr class='warning'><td>$MODULE</td><td>$LICENSE</td><td>⚠️ Review Required</td></tr>" >> license_report.html
+                WARNINGS=$((WARNINGS + 1))
+              else
+                echo "<tr class='violation'><td>$MODULE</td><td>$LICENSE</td><td>❌ Not Approved</td></tr>" >> license_report.html
+                VIOLATIONS=$((VIOLATIONS + 1))
+              fi
+            fi
+          done < "$REPORT_FILE"
+          
+          echo "</table>" >> license_report.html
+          echo "<h3>Summary:</h3>" >> license_report.html
+          echo "<p>Violations found: $VIOLATIONS</p>" >> license_report.html
+          echo "<p>Warnings found: $WARNINGS</p>" >> license_report.html
+          echo "</body></html>" >> license_report.html
+          
+          # Set outputs for next steps
+          echo "violations=$VIOLATIONS" >> $GITHUB_OUTPUT
+          echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
+          
+          if [ $VIOLATIONS -gt 0 ]; then
+            exit 1
+          fi
+          
+      # Upload HTML Report
       - name: Upload License Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -71,4 +103,4 @@ jobs:
           name: license-reports
           path: |
             build/reports/dependency-license/*
-            license_finder_report.xml
+            license_report.html
