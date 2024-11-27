@@ -17,21 +17,13 @@ jobs:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4
 
-      # Install Dependencies for License Finder (if needed)
-      - name: 'Install License Finder'
-        run: |
-          apt-get update
-          apt-get install -y ruby
-          gem install --user-install license_finder
-        env:
-          PATH: "${HOME}/.gem/ruby/3.0.0/bin:${PATH}"
-
-
-      # Run License Finder with Gradle
-      - name: 'Run License Finder'
-        run: |
-          ./gradlew dependencies --configuration runtimeClasspath > dependencies.txt
-          license_finder report --enabled-package-managers=gradle --format xml --quiet --decisions-file=decisions.yml --output-file=license_finder_report.xml
+      # Set up Ruby using Docker (Install License Finder)
+      - name: 'Run License Finder in Ruby Docker container'
+        uses: docker://ruby:3.1
+        with:
+          entrypoint: /bin/bash
+          args: |
+            -c "gem install license_finder && license_finder report --enabled-package-managers=gradle --format xml --quiet --decisions-file=decisions.yml --output-file=license_finder_report.xml"
 
       # Publish Report to GitHub UI
       - name: Publish Test Results
