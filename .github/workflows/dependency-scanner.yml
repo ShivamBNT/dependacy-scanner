@@ -17,9 +17,9 @@ jobs:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4
  
-      # Removing Maven Wrapper Script
-      - name: 'License Finder fix with mvnw'
-        run: rm mvnw
+      # # Removing Maven Wrapper Script
+      # - name: 'License Finder fix with mvnw'
+      #   run: rm mvnw
  
       # Run License Finder
       - name: 'Run License Finder'
