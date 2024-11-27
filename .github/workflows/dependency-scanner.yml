@@ -16,11 +16,13 @@ jobs:
       # Checkout Repository
       - name: 'Checkout Repository'
         uses: actions/checkout@v4
- 
-      # # Removing Maven Wrapper Script
-      # - name: 'License Finder fix with mvnw'
-      #   run: rm mvnw
- 
+      
+      # Set up Gradle
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 
+        with:
+          gradle-version: '8.5'
+        
       # Run License Finder
       - name: 'Run License Finder'
         uses: jmservera/license-finder-action@main
@@ -46,4 +48,3 @@ jobs:
         with:
           name: license-finder-report
           path: ${{ github.workspace }}/license_finder_report.xml
- 
