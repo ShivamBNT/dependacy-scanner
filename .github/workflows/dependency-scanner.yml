@@ -30,11 +30,23 @@ jobs:
         with:
           gradle-version: '8.5'
 
-            # Run License Finder (Direct Download)
-      - name: 'Install License Finder'
+            # Install License Finder using Homebrew
+      - name: Install License Finder
         run: |
-          curl -L https://github.com/pivotal/LicenseFinder/releases/download/v6.2.2/license_finder-6.2.2-linux-x86_64.tar.gz | tar -xz
-          ./license_finder-6.2.2-linux-x86_64/bin/license_finder report --format xml --output-file license_finder_report.xml
+          # Install Homebrew
+          sudo apt update
+          sudo apt install -y build-essential curl
+          curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash
+          echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.profile
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          
+          # Install license_finder using brew
+          brew install license_finder
+
+      # Run License Finder
+      - name: 'Run License Finder'
+        run: |
+          license_finder report --format xml --output-file license_finder_report.xml
 
       # Publish Report to GitHub UI
       - name: Publish Test Results
