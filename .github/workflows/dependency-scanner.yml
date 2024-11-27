@@ -30,11 +30,10 @@ jobs:
         with:
           gradle-version: '8.5'
 
-      # Run License Finder (Assuming you have license-finder configured for your Gradle project)
-      - name: 'Run License Finder'
+            # Run License Finder (Direct Download)
+      - name: 'Install License Finder'
         run: |
-          # Install dependencies for License Finder
-          curl -L https://github.com/pivotal/LicenseFinder/releases/download/v6.2.2/license_finder-6.2.2-linux-x86_64.tar.gz | tar xz
+          curl -L https://github.com/pivotal/LicenseFinder/releases/download/v6.2.2/license_finder-6.2.2-linux-x86_64.tar.gz | tar -xz
           ./license_finder-6.2.2-linux-x86_64/bin/license_finder report --format xml --output-file license_finder_report.xml
 
       # Publish Report to GitHub UI
