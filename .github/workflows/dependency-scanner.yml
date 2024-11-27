@@ -43,17 +43,26 @@ jobs:
           # Install license_finder using brew
           brew install license_finder
 
+           # Install License Finder using Homebrew
+      - name: Install License Finder
+        run: |
+          # Install Homebrew
+          sudo apt update
+          sudo apt install -y build-essential curl
+          curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash
+          
+          # Add Homebrew to the PATH
+          echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> $GITHUB_ENV
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          
+          # Install licensefinder using Homebrew
+          brew install licensefinder
+
       # Run License Finder
       - name: 'Run License Finder'
         run: |
-          license_finder report --format xml --output-file license_finder_report.xml
+          licensefinder report --format xml --output-file license_finder_report.xml
 
-      # Publish Report to GitHub UI
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2.2.0
-        if: always()
-        with:
-          junit_files: "license_finder_report.xml"
 
       # Upload Report In Artifact
       - name: 'Upload Dependency Review Report In Artifact'
