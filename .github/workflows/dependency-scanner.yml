@@ -1,14 +1,14 @@
 name: License Compliance Verification
-
+ 
 on:
   push:
     branches: [ "main" ]
-
+ 
 permissions:
   contents: read
   issues: read
   checks: write
-
+ 
 jobs:
   license-compliance-verification:
     runs-on: ubuntu-latest
@@ -16,30 +16,34 @@ jobs:
       # Checkout Repository
       - name: 'Checkout Repository'
         uses: actions/checkout@v4
-
-      # Run License Finder and Generate Report in JUnit Format
-      - name: 'Run License Finder in Ruby Docker container'
-        uses: docker://ruby:3.1
+ 
+      # Removing Maven Wrapper Script
+      - name: 'License Finder fix with mvnw'
+        run: rm mvnw
+ 
+      # Run License Finder
+      - name: 'Run License Finder'
+        uses: jmservera/license-finder-action@main
         with:
-          entrypoint: /bin/bash
-          args: |
-            -c "gem install license_finder && license_finder report --enabled-package-managers=gradle --format junit --quiet --decisions-file=decisions.yml --output-file=license_finder_report.xml"
-      
-      # Verify Report Generation
-      - name: Verify if report file exists
-        run: ls -l license_finder_report.xml
-
+          permitted-licenses: MIT,Apache-2.0
+          approved-dependencies: |
+                                 hamcrest,hamcrest-core,hamcrest-library
+                                 junit-jupiter,junit-jupiter-api,junit-jupiter-engine,javax.annotation-api
+          report-name: license_finder_report.xml
+          base-path: ${{ github.workspace }}
+ 
       # Publish Report to GitHub UI
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2.2.0
         if: always()
         with:
           junit_files: "license_finder_report.xml"
-
+ 
       # Upload Report In Artifact
       - name: 'Upload Dependency Review Report In Artifact'
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: license-finder-report
-          path: license_finder_report.xml
+          path: ${{ github.workspace }}/license_finder_report.xml
+ 
