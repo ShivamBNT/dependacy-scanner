@@ -17,13 +17,17 @@ jobs:
       - name: 'Checkout Repository'
         uses: actions/checkout@v4
 
-      # Set up Ruby using Docker (Install License Finder)
+      # Run License Finder and Generate Report in JUnit Format
       - name: 'Run License Finder in Ruby Docker container'
         uses: docker://ruby:3.1
         with:
           entrypoint: /bin/bash
           args: |
             -c "gem install license_finder && license_finder report --enabled-package-managers=gradle --format junit --quiet --decisions-file=decisions.yml --output-file=license_finder_report.xml"
+      
+      # Verify Report Generation
+      - name: Verify if report file exists
+        run: ls -l license_finder_report.xml
 
       # Publish Report to GitHub UI
       - name: Publish Test Results
@@ -38,4 +42,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: license-finder-report
-          path: ${{ github.workspace }}/license_finder_report.xml
+          path: license_finder_report.xml
