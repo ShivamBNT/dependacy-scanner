@@ -23,7 +23,7 @@ jobs:
         with:
           entrypoint: /bin/bash
           args: |
-            -c "gem install license_finder && license_finder report --enabled-package-managers=gradle --format xml --quiet --decisions-file=decisions.yml --output-file=license_finder_report.xml"
+            -c "gem install license_finder && license_finder report --enabled-package-managers=gradle --format xml --quiet --decisions-file=decisions.yml > license_finder_report.xml"
 
       # Publish Report to GitHub UI
       - name: Publish Test Results
