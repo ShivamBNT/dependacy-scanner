@@ -84,4 +84,4 @@ jobs:
             build/reports/dependency-license/index.html
             build/reports/dependency-license/index.xml
             build/reports/dependency-license/index.json
-            build/reports/dependency-license/license_finder_report.xml
+            license_finder_report.xml
