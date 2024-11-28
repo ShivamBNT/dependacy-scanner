@@ -27,11 +27,11 @@ jobs:
         with:
           gradle-version: '8.5'
           
-      - name: give permission to gradle
+      - name: Give permisission to gradle
         run: chmod +x gradlew
 
       - name: Generate License Report
-        run: ./gradlew generateLicenseReport
+        run: ./gradlew generateLicenseReport --info
 
       - name: Install jq
         run: sudo apt-get install -y jq
@@ -65,16 +65,29 @@ jobs:
           # Process each dependency
           while IFS= read -r dep; do
             MODULE_NAME=$(echo "$dep" | jq -r '.moduleName')
-            LICENSE=$(echo "$dep" | jq -r '.license')
+            LICENSE=$(echo "$dep" | jq -r '.licenseName // .license // "UNKNOWN"')
+            MANIFEST_LICENSE=$(echo "$dep" | jq -r '.manifistLicense // "UNKNOWN"')
+            POM_LICENSE=$(echo "$dep" | jq -r '.pomLicense // "UNKNOWN"')
+            
+            # Use the first non-UNKNOWN license found
+            if [ "$LICENSE" == "UNKNOWN" ] || [ "$LICENSE" == "null" ]; then
+              if [ "$MANIFEST_LICENSE" != "UNKNOWN" ] && [ "$MANIFEST_LICENSE" != "null" ]; then
+                LICENSE="$MANIFEST_LICENSE"
+              elif [ "$POM_LICENSE" != "UNKNOWN" ] && [ "$POM_LICENSE" != "null" ]; then
+                LICENSE="$POM_LICENSE"
+              fi
+            fi
             
             # Check if license is in allowed list
             LICENSE_ALLOWED=0
-            for allowed in "${ALLOWED_LICENSES[@]}"; do
-              if [ "$LICENSE" == "$allowed" ]; then
-                LICENSE_ALLOWED=1
-                break
-              fi
-            done
+            if [ "$LICENSE" != "UNKNOWN" ] && [ "$LICENSE" != "null" ]; then
+              for allowed in "${ALLOWED_LICENSES[@]}"; do
+                if [ "$LICENSE" == "$allowed" ]; then
+                  LICENSE_ALLOWED=1
+                  break
+                fi
+              done
+            fi
             
             if [ $LICENSE_ALLOWED -eq 1 ]; then
               # Add passing test case
@@ -84,10 +97,10 @@ jobs:
             else
               # Add failing test case
               echo "<testcase name=\"License Check - $MODULE_NAME\" classname=\"License Compliance\">" >> license_finder_report.xml
-              echo "  <failure message=\"Unauthorized license detected\">Module: $MODULE_NAME&#xA;License: $LICENSE - NOT ALLOWED</failure>" >> license_finder_report.xml
+              echo "  <failure message=\"Unauthorized or unknown license detected\">Module: $MODULE_NAME&#xA;License: $LICENSE - NOT ALLOWED</failure>" >> license_finder_report.xml
               echo "</testcase>" >> license_finder_report.xml
               
-              echo "❌ Unauthorized license '$LICENSE' found in dependency '$MODULE_NAME'"
+              echo "❌ Unauthorized or unknown license '$LICENSE' found in dependency '$MODULE_NAME'"
               VIOLATIONS_FOUND=1
             fi
           done < <(jq -c '.dependencies[]' "$LICENSE_JSON")
@@ -96,19 +109,17 @@ jobs:
           echo '</testsuite>' >> license_finder_report.xml
           echo '</testsuites>' >> license_finder_report.xml
           
+          # Print the generated report for debugging
+          echo "Generated XML Report:"
+          cat license_finder_report.xml
+          
           # Exit with error if violations found
           if [ $VIOLATIONS_FOUND -eq 1 ]; then
-            echo "❌ License compliance check failed! Unauthorized licenses detected."
+            echo "❌ License compliance check failed! Unauthorized or unknown licenses detected."
             exit 1
           else
             echo "✅ License compliance check passed! All licenses are authorized."
           fi
-
-      - name: Publish Test Results
-        uses: EnricoMi/publish-unit-test-result-action@v2.2.0
-        if: always()
-        with:
-          junit_files: "license_finder_report.xml"
 
       - name: Copy Required Files
         if: always()
@@ -116,7 +127,6 @@ jobs:
           mkdir -p license-report-files
           cp build/reports/dependency-license/index.json license-report-files/
           cp build/reports/dependency-license/index.html license-report-files/
-          cp build/reports/dependency-license/index.xml license-report-files/
           cp license_finder_report.xml license-report-files/
 
       - name: Upload License Reports
@@ -124,6 +134,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: license-reports
-          path: |
-            build/reports/dependency-license/
-            license_finder_report.xml
+          path: license-report-files/
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2.2.0
+        if: always()
+        with:
+          junit_files: "license_finder_report.xml"
