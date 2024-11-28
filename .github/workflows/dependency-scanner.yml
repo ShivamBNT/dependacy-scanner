@@ -110,6 +110,15 @@ jobs:
         with:
           junit_files: "license_finder_report.xml"
 
+      - name: Copy Required Files
+        if: always()
+        run: |
+          mkdir -p license-report-files
+          cp build/reports/dependency-license/index.json license-report-files/
+          cp build/reports/dependency-license/index.html license-report-files/
+          cp build/reports/dependency-license/index.xml license-report-files/
+          cp license_finder_report.xml license-report-files/
+
       - name: Upload License Reports
         if: always()
         uses: actions/upload-artifact@v4
