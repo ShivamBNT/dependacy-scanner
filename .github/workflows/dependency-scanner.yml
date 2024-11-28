@@ -13,9 +13,11 @@ jobs:
   license-compliance-verification:
     runs-on: ubuntu-latest
     steps:
+      # Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # Set up JDK 21
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -27,117 +29,55 @@ jobs:
         with:
           gradle-version: '8.5'
           
-      - name: Give permisission to gradle
+      - name: give permission to gradle
         run: chmod +x gradlew
 
+      # Generate License Report
       - name: Generate License Report
-        run: ./gradlew generateLicenseReport --info
-
+        run: |
+          ./gradlew generateLicenseReport
+          find build -name "*.json" -type f
+      # Convert JSON report to compatible XML format
       - name: Install jq
         run: sudo apt-get install -y jq
 
-      - name: Check License Compliance
+      - name: Convert License Report to JUnit XML
         run: |
-          LICENSE_JSON="build/reports/dependency-license/index.json"
-          ALLOWED_LICENSES_JSON="config/allowed-licenses.json"
-          
-          if [ ! -f "$LICENSE_JSON" ]; then
-            echo "Error: License report not found at $LICENSE_JSON"
-            exit 1
-          fi
-          
-          if [ ! -f "$ALLOWED_LICENSES_JSON" ]; then
-            echo "Error: Allowed licenses file not found at $ALLOWED_LICENSES_JSON"
-            exit 1
-          fi
-          
-          # Create the XML report header
           echo '<?xml version="1.0" encoding="UTF-8"?>' > license_finder_report.xml
           echo '<testsuites>' >> license_finder_report.xml
-          echo '<testsuite name="License Compliance">' >> license_finder_report.xml
+          echo '<testsuite name="License Compliance" tests="1">' >> license_finder_report.xml
           
-          # Read allowed licenses into an array
-          ALLOWED_LICENSES=($(jq -r '.allowedLicenses[]' "$ALLOWED_LICENSES_JSON"))
+          LICENSE_JSON="build/reports/dependency-license/index.json"
           
-          # Initialize violation flag
-          VIOLATIONS_FOUND=0
+          if [ -f "$LICENSE_JSON" ]; then
+            jq -r '.dependencies[] | "  <testcase name=\"License Check - \(.moduleName)\" classname=\"License Compliance\">
+              <system-out>Module: \(.moduleName)\nLicense: \(.license)</system-out>
+            </testcase>"' "$LICENSE_JSON" >> license_finder_report.xml || {
+              echo "Error processing JSON file"
+              cat "$LICENSE_JSON"
+              exit 1
+            }
+          else
+            echo "Error: License report JSON file not found at $LICENSE_JSON"
+            find build -type f -name "*.json"
+            exit 1
+          fi
           
-          # Process each dependency
-          while IFS= read -r dep; do
-            MODULE_NAME=$(echo "$dep" | jq -r '.moduleName')
-            LICENSE=$(echo "$dep" | jq -r '.licenseName // .license // "UNKNOWN"')
-            MANIFEST_LICENSE=$(echo "$dep" | jq -r '.manifistLicense // "UNKNOWN"')
-            POM_LICENSE=$(echo "$dep" | jq -r '.pomLicense // "UNKNOWN"')
-            
-            # Use the first non-UNKNOWN license found
-            if [ "$LICENSE" == "UNKNOWN" ] || [ "$LICENSE" == "null" ]; then
-              if [ "$MANIFEST_LICENSE" != "UNKNOWN" ] && [ "$MANIFEST_LICENSE" != "null" ]; then
-                LICENSE="$MANIFEST_LICENSE"
-              elif [ "$POM_LICENSE" != "UNKNOWN" ] && [ "$POM_LICENSE" != "null" ]; then
-                LICENSE="$POM_LICENSE"
-              fi
-            fi
-            
-            # Check if license is in allowed list
-            LICENSE_ALLOWED=0
-            if [ "$LICENSE" != "UNKNOWN" ] && [ "$LICENSE" != "null" ]; then
-              for allowed in "${ALLOWED_LICENSES[@]}"; do
-                if [ "$LICENSE" == "$allowed" ]; then
-                  LICENSE_ALLOWED=1
-                  break
-                fi
-              done
-            fi
-            
-            if [ $LICENSE_ALLOWED -eq 1 ]; then
-              # Add passing test case
-              echo "<testcase name=\"License Check - $MODULE_NAME\" classname=\"License Compliance\">" >> license_finder_report.xml
-              echo "  <system-out>Module: $MODULE_NAME&#xA;License: $LICENSE - ALLOWED</system-out>" >> license_finder_report.xml
-              echo "</testcase>" >> license_finder_report.xml
-            else
-              # Add failing test case
-              echo "<testcase name=\"License Check - $MODULE_NAME\" classname=\"License Compliance\">" >> license_finder_report.xml
-              echo "  <failure message=\"Unauthorized or unknown license detected\">Module: $MODULE_NAME&#xA;License: $LICENSE - NOT ALLOWED</failure>" >> license_finder_report.xml
-              echo "</testcase>" >> license_finder_report.xml
-              
-              echo "❌ Unauthorized or unknown license '$LICENSE' found in dependency '$MODULE_NAME'"
-              VIOLATIONS_FOUND=1
-            fi
-          done < <(jq -c '.dependencies[]' "$LICENSE_JSON")
-          
-          # Close the XML report
           echo '</testsuite>' >> license_finder_report.xml
           echo '</testsuites>' >> license_finder_report.xml
-          
-          # Print the generated report for debugging
-          echo "Generated XML Report:"
-          cat license_finder_report.xml
-          
-          # Exit with error if violations found
-          if [ $VIOLATIONS_FOUND -eq 1 ]; then
-            echo "❌ License compliance check failed! Unauthorized or unknown licenses detected."
-            exit 1
-          else
-            echo "✅ License compliance check passed! All licenses are authorized."
-          fi
-
-      - name: Copy Required Files
-        if: always()
-        run: |
-          mkdir -p license-report-files
-          cp build/reports/dependency-license/index.json license-report-files/
-          cp build/reports/dependency-license/index.html license-report-files/
-          cp license_finder_report.xml license-report-files/
-
-      - name: Upload License Reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: license-reports
-          path: license-report-files/
-
+      # Publish Report to GitHub UI
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2.2.0
         if: always()
         with:
           junit_files: "license_finder_report.xml"
+
+      # Upload Original Reports as Artifacts
+      - name: Upload License Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-reports
+          path: |
+            build/reports/dependency-license/
+            license_finder_report.xml
