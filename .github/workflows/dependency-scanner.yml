@@ -24,26 +24,48 @@ jobs:
           java-version: '21'
           distribution: 'microsoft'
 
-      # Setup Gradle
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 
         with:
           gradle-version: '8.5'
-
+          
       - name: give permission to gradle
         run: chmod +x gradlew
 
-      # Run License Finder for Gradle
-      - name: 'Run License Finder'
-        uses: jmservera/license-finder-action@main
-        with:
-          permitted-licenses: MIT,Apache-2.0
-          approved-dependencies: |
-            hamcrest,hamcrest-core,hamcrest-library
-            junit-jupiter,junit-jupiter-api,junit-jupiter-engine,javax.annotation-api
-          report-name: license_finder_report.xml
-          base-path: ${{ github.workspace }}
+      # Generate License Report
+      - name: Generate License Report
+        run: |
+          ./gradlew generateLicenseReport
+          find build -name "*.json" -type f
+          
+      # Convert JSON report to compatible XML format
+      - name: Install jq
+        run: sudo apt-get install -y jq
 
+      - name: Convert License Report to JUnit XML
+        run: |
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > license_finder_report.xml
+          echo '<testsuites>' >> license_finder_report.xml
+          echo '<testsuite name="License Compliance" tests="1">' >> license_finder_report.xml
+          
+          LICENSE_JSON="build/reports/dependency-license/index.json"
+          
+          if [ -f "$LICENSE_JSON" ]; then
+            jq -r '.dependencies[] | "  <testcase name=\"License Check - \(.moduleName)\" classname=\"License Compliance\">
+              <system-out>Module: \(.moduleName)\nLicense: \(.license)</system-out>
+            </testcase>"' "$LICENSE_JSON" >> license_finder_report.xml || {
+              echo "Error processing JSON file"
+              cat "$LICENSE_JSON"
+              exit 1
+            }
+          else
+            echo "Error: License report JSON file not found at $LICENSE_JSON"
+            find build -type f -name "*.json"
+            exit 1
+          fi
+          
+          echo '</testsuite>' >> license_finder_report.xml
+          echo '</testsuites>' >> license_finder_report.xml
       # Publish Report to GitHub UI
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2.2.0
@@ -51,11 +73,13 @@ jobs:
         with:
           junit_files: "license_finder_report.xml"
 
-      # Upload License Reports as Artifacts
+      # Upload Only Specific License Reports as Artifacts
       - name: Upload License Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: license-reports
           path: |
-            license_finder_report.xml
+            build/reports/dependency-license/index.html
+            build/reports/dependency-license/index.json
+            
