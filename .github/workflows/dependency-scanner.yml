@@ -2,7 +2,7 @@ name: License Compliance Verification
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
 
 permissions:
   contents: read
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Checkout Repository
-      - name: 'Checkout Repository'
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       # Set up JDK 21
@@ -22,52 +22,48 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'microsoft'
+          distribution: 'temurin'
 
-      # Set up Gradle
+      # Setup Gradle
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5
+        uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: '8.5'
+          gradle-version: 8.5
 
-            # Install License Finder using Homebrew
-      - name: Install License Finder
+      # Generate License Report
+      - name: Generate License Report
+        run: ./gradlew generateLicenseReport
+
+      # Convert JSON report to compatible XML format
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Convert License Report to JUnit XML
         run: |
-          # Install Homebrew
-          sudo apt update
-          sudo apt install -y build-essential curl
-          curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash
-          echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> ~/.profile
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > license_finder_report.xml
+          echo '<testsuites>' >> license_finder_report.xml
+          echo '<testsuite name="License Compliance" tests="1">' >> license_finder_report.xml
           
-          # Install license_finder using brew
-          brew install license_finder
-
-           # Install License Finder using Homebrew
-      - name: Install License Finder
-        run: |
-          # Install Homebrew
-          sudo apt update
-          sudo apt install -y build-essential curl
-          curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash
+          jq -r '.dependencies[] | "  <testcase name=\"License Check - \(.moduleName)\" classname=\"License Compliance\">
+            <system-out>Module: \(.moduleName)\nLicense: \(.license)</system-out>
+          </testcase>"' build/reports/dependency-license/licenses.json >> license_finder_report.xml
           
-          # Add Homebrew to the PATH
-          echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"' >> $GITHUB_ENV
-          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          
-          # Install licensefinder using Homebrew
-          brew install licensefinder
+          echo '</testsuite>' >> license_finder_report.xml
+          echo '</testsuites>' >> license_finder_report.xml
 
-      # Run License Finder
-      - name: 'Run License Finder'
-        run: |
-          licensefinder report --format xml --output-file license_finder_report.xml
+      # Publish Report to GitHub UI
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2.2.0
+        if: always()
+        with:
+          junit_files: "license_finder_report.xml"
 
-
-      # Upload Report In Artifact
-      - name: 'Upload Dependency Review Report In Artifact'
+      # Upload Original Reports as Artifacts
+      - name: Upload License Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: license-finder-report
-          path: ${{ github.workspace }}/license_finder_report.xml
+          name: license-reports
+          path: |
+            build/reports/dependency-license/
+            license_finder_report.xml
