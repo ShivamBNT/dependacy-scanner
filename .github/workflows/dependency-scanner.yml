@@ -13,68 +13,100 @@ jobs:
   license-compliance-verification:
     runs-on: ubuntu-latest
     steps:
-      # Checkout Repository
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Set up JDK 21
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'microsoft'
+          distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 
+        uses: gradle/gradle-build-action@v2
         with:
-          gradle-version: '8.5'
-          
-      - name: give permission to gradle
-        run: chmod +x gradlew
+          gradle-version: 8.5
 
-      # Generate License Report
       - name: Generate License Report
-        run: |
-          ./gradlew generateLicenseReport
-          find build -name "*.json" -type f
+        run: ./gradlew generateLicenseReport
 
-      # Convert JSON report to compatible XML format
       - name: Install jq
         run: sudo apt-get install -y jq
 
-      - name: Convert License Report to JUnit XML
+      - name: Check License Compliance
         run: |
-          echo '<?xml version="1.0" encoding="UTF-8"?>' > license_finder_report.xml
-          echo '<testsuites>' >> license_finder_report.xml
-          echo '<testsuite name="License Compliance" tests="1">' >> license_finder_report.xml
-          
           LICENSE_JSON="build/reports/dependency-license/index.json"
+          ALLOWED_LICENSES_JSON="config/allowed-licenses.json"
           
-          if [ -f "$LICENSE_JSON" ]; then
-            jq -r '.dependencies[] | "  <testcase name=\"License Check - \(.moduleName)\" classname=\"License Compliance\">
-              <system-out>Module: \(.moduleName)\nLicense: \(.license)</system-out>
-            </testcase>"' "$LICENSE_JSON" >> license_finder_report.xml || {
-              echo "Error processing JSON file"
-              cat "$LICENSE_JSON"
-              exit 1
-            }
-          else
-            echo "Error: License report JSON file not found at $LICENSE_JSON"
-            find build -type f -name "*.json"
+          if [ ! -f "$LICENSE_JSON" ]; then
+            echo "Error: License report not found at $LICENSE_JSON"
             exit 1
           fi
           
+          if [ ! -f "$ALLOWED_LICENSES_JSON" ]; then
+            echo "Error: Allowed licenses file not found at $ALLOWED_LICENSES_JSON"
+            exit 1
+          fi
+          
+          # Create the XML report header
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > license_finder_report.xml
+          echo '<testsuites>' >> license_finder_report.xml
+          echo '<testsuite name="License Compliance">' >> license_finder_report.xml
+          
+          # Read allowed licenses into an array
+          ALLOWED_LICENSES=($(jq -r '.allowedLicenses[]' "$ALLOWED_LICENSES_JSON"))
+          
+          # Initialize violation flag
+          VIOLATIONS_FOUND=0
+          
+          # Process each dependency
+          while IFS= read -r dep; do
+            MODULE_NAME=$(echo "$dep" | jq -r '.moduleName')
+            LICENSE=$(echo "$dep" | jq -r '.license')
+            
+            # Check if license is in allowed list
+            LICENSE_ALLOWED=0
+            for allowed in "${ALLOWED_LICENSES[@]}"; do
+              if [ "$LICENSE" == "$allowed" ]; then
+                LICENSE_ALLOWED=1
+                break
+              fi
+            done
+            
+            if [ $LICENSE_ALLOWED -eq 1 ]; then
+              # Add passing test case
+              echo "<testcase name=\"License Check - $MODULE_NAME\" classname=\"License Compliance\">" >> license_finder_report.xml
+              echo "  <system-out>Module: $MODULE_NAME&#xA;License: $LICENSE - ALLOWED</system-out>" >> license_finder_report.xml
+              echo "</testcase>" >> license_finder_report.xml
+            else
+              # Add failing test case
+              echo "<testcase name=\"License Check - $MODULE_NAME\" classname=\"License Compliance\">" >> license_finder_report.xml
+              echo "  <failure message=\"Unauthorized license detected\">Module: $MODULE_NAME&#xA;License: $LICENSE - NOT ALLOWED</failure>" >> license_finder_report.xml
+              echo "</testcase>" >> license_finder_report.xml
+              
+              echo "❌ Unauthorized license '$LICENSE' found in dependency '$MODULE_NAME'"
+              VIOLATIONS_FOUND=1
+            fi
+          done < <(jq -c '.dependencies[]' "$LICENSE_JSON")
+          
+          # Close the XML report
           echo '</testsuite>' >> license_finder_report.xml
           echo '</testsuites>' >> license_finder_report.xml
+          
+          # Exit with error if violations found
+          if [ $VIOLATIONS_FOUND -eq 1 ]; then
+            echo "❌ License compliance check failed! Unauthorized licenses detected."
+            exit 1
+          else
+            echo "✅ License compliance check passed! All licenses are authorized."
+          fi
 
-      # Publish Report to GitHub UI
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2.2.0
         if: always()
         with:
           junit_files: "license_finder_report.xml"
 
-      # Upload Original Reports as Artifacts
       - name: Upload License Reports
         if: always()
         uses: actions/upload-artifact@v4
