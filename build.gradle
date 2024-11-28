@@ -29,7 +29,7 @@ dependencies {
 licenseReport {
     // Path to the allowed licenses file
     allowedLicensesFile = file("$projectDir/config/allowed-licenses.json")
-    
+
     // Define renderers to output the report in various formats
     renderers = [
         new com.github.jk1.license.render.JsonReportRenderer(),

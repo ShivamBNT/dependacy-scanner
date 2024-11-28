@@ -22,20 +22,21 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'temurin'
+          distribution: 'microsoft'
 
-      # Setup Gradle
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 
         with:
-          gradle-version: 8.5
-
+          gradle-version: '8.5'
+          
       - name: give permission to gradle
         run: chmod +x gradlew
 
       # Generate License Report
       - name: Generate License Report
-        run: ./gradlew generateLicenseReport
+        run: |
+          ./gradlew generateLicenseReport
+          find build -name "*.json" -type f
 
       # Convert JSON report to compatible XML format
       - name: Install jq
@@ -47,9 +48,21 @@ jobs:
           echo '<testsuites>' >> license_finder_report.xml
           echo '<testsuite name="License Compliance" tests="1">' >> license_finder_report.xml
           
-          jq -r '.dependencies[] | "  <testcase name=\"License Check - \(.moduleName)\" classname=\"License Compliance\">
-            <system-out>Module: \(.moduleName)\nLicense: \(.license)</system-out>
-          </testcase>"' build/reports/dependency-license/licenses.json >> license_finder_report.xml
+          LICENSE_JSON="build/reports/dependency-license/index.json"
+          
+          if [ -f "$LICENSE_JSON" ]; then
+            jq -r '.dependencies[] | "  <testcase name=\"License Check - \(.moduleName)\" classname=\"License Compliance\">
+              <system-out>Module: \(.moduleName)\nLicense: \(.license)</system-out>
+            </testcase>"' "$LICENSE_JSON" >> license_finder_report.xml || {
+              echo "Error processing JSON file"
+              cat "$LICENSE_JSON"
+              exit 1
+            }
+          else
+            echo "Error: License report JSON file not found at $LICENSE_JSON"
+            find build -type f -name "*.json"
+            exit 1
+          fi
           
           echo '</testsuite>' >> license_finder_report.xml
           echo '</testsuites>' >> license_finder_report.xml
