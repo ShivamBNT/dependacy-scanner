@@ -37,6 +37,7 @@ jobs:
         run: |
           ./gradlew generateLicenseReport
           find build -name "*.json" -type f
+          
       # Convert JSON report to compatible XML format
       - name: Install jq
         run: sudo apt-get install -y jq
@@ -65,6 +66,7 @@ jobs:
           
           echo '</testsuite>' >> license_finder_report.xml
           echo '</testsuites>' >> license_finder_report.xml
+
       # Publish Report to GitHub UI
       - name: Publish Test Results
         uses: EnricoMi/publish-unit-test-result-action@v2.2.0
@@ -72,12 +74,13 @@ jobs:
         with:
           junit_files: "license_finder_report.xml"
 
-      # Upload Original Reports as Artifacts
+      # Upload Only Specific License Reports as Artifacts
       - name: Upload License Reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: license-reports
           path: |
-            build/reports/dependency-license/
-            license_finder_report.xml
+            build/reports/dependency-license/index.html
+            build/reports/dependency-license/index.xml
+            build/reports/dependency-license/index.json

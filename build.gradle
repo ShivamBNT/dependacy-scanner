@@ -26,6 +26,8 @@ dependencies {
     implementation 'mysql:mysql-connector-java:8.0.33'
 }
 
+
+
 licenseReport {
     // Path to the allowed licenses file
     allowedLicensesFile = file("$projectDir/config/allowed-licenses.json")
