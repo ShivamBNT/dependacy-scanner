@@ -20,12 +20,15 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: '21'
-          distribution: 'temurin'
+          distribution: 'microsoft'
 
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@417ae3ccd767c252f5661f1ace9f835f9654f2b5 
         with:
-          gradle-version: 8.5
+          gradle-version: '8.5'
+          
+      - name: give permission to gradle
+        run: chmod +x gradlew
 
       - name: Generate License Report
         run: ./gradlew generateLicenseReport
