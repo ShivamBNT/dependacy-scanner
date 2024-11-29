@@ -6,8 +6,10 @@ on:
 
 permissions:
   contents: read
-  issues: read
+  security-events: write
+  actions: read
   checks: write
+  packages: write
 
 jobs:
   license-compliance-verification:
