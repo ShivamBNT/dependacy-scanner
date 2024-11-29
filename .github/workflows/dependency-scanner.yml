@@ -82,4 +82,36 @@ jobs:
           path: |
             build/reports/dependency-license/index.html
             build/reports/dependency-license/index.json
-            
+
+      - name: Publish License Reports to GHCR
+        run: |
+          echo "Publishing License Reports to GitHub Packages"
+
+          # Authenticate with GitHub Container Registry (GHCR)
+          echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+          # Prepare reports directory
+          mkdir -p license-reports
+          cp build/reports/dependency-license/index.html license-reports/
+          cp build/reports/dependency-license/index.xml license-reports/
+          cp build/reports/dependency-license/index.json license-reports/
+          cp license_finder_report.xml license-reports/
+
+          # Set repository owner and name in lowercase
+          REPO_OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+
+          # Define image tag for GHCR
+          IMAGE_TAG="ghcr.io/${REPO_OWNER}/${REPO_NAME}-license-reports:latest"
+
+          # Create a Dockerfile for the reports
+          cat <<EOF > Dockerfile
+          FROM scratch
+          COPY license-reports/ /license-reports/
+          EOF
+
+          # Build and push the Docker image
+          docker build -t $IMAGE_TAG .
+          docker push $IMAGE_TAG
+
+                  
